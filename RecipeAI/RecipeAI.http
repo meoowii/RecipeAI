@@ -1,0 +1,14 @@
+﻿@RecipeAI_HostAddress = https://localhost:7126
+# ↑ zmień port na swój z launchSettings.json (adres HTTPS)
+
+### Wyślij zdjęcie przepisu do OCR + analizy makro
+POST {{RecipeAI_HostAddress}}/api/analyze-recipe
+Accept: application/json
+Content-Type: multipart/form-data; boundary=WebKitFormBoundary
+
+--WebKitFormBoundary
+Content-Disposition: form-data; name="image"; filename="pol.png"
+Content-Type: image/png
+
+< C:\Users\meowi\source\repos\RecipeAI\RecipeAI\Screenshots\pol.png
+--WebKitFormBoundary--
