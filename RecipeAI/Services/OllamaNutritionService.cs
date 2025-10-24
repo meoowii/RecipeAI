@@ -1,5 +1,7 @@
 ﻿using RecipeAI.Interfaces;
 using RecipeAI.Models;
+using RecipeAI.Options;
+using Microsoft.Extensions.Options;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -11,18 +13,16 @@ public class OllamaNutritionService : INutritionAnalysisService
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<OllamaNutritionService> _logger;
-    private readonly string _ollamaEndpoint;
-    private readonly string _ollamaModel;
+    private readonly OllamaOptions _options;
 
     public OllamaNutritionService(
         ILogger<OllamaNutritionService> logger,
-        IConfiguration configuration,
+        IOptions<OllamaOptions> options,
         IHttpClientFactory httpClientFactory)
     {
         _logger = logger;
         _httpClientFactory = httpClientFactory;
-        _ollamaEndpoint = configuration["Ollama:Endpoint"] ?? "http://localhost:11434";
-        _ollamaModel = configuration["Ollama:ModelName"] ?? "mistral";
+        _options = options.Value;
     }
 
     public async Task<NutritionInfo> AnalyzeIngredientsAsync(string ingredients, string language)
@@ -60,11 +60,11 @@ public class OllamaNutritionService : INutritionAnalysisService
     private async Task<string> SendToOllamaAsync(string prompt)
     {
         var client = _httpClientFactory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{_ollamaEndpoint.TrimEnd('/')}/api/generate");
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{_options.Endpoint.TrimEnd('/')}/api/generate");
 
         var body = new
         {
-            model = _ollamaModel,
+            model = _options.ModelName,
             prompt,
             stream = false,
             options = new
@@ -132,38 +132,35 @@ public class OllamaNutritionService : INutritionAnalysisService
     private static string BuildPrompt(string ingredients, string language)
     {
         bool isPolish = language?.Equals("pl", StringComparison.OrdinalIgnoreCase) == true;
+        return isPolish ? BuildPolishPrompt(ingredients) : BuildEnglishPrompt(ingredients);
+    }
 
-        string prompt = isPolish
-            ? """
-Jesteś dietetykiem. Policz makroskładniki dla całego przepisu na podstawie listy składników.
+    private static string BuildPolishPrompt(string ingredients)
+    {
+        return "Jesteś dietetykiem. Policz makroskładniki dla całego przepisu na podstawie listy składników.\n\n" +
+               "Zasady:\n" +
+               "- Jeśli brakuje dokładnych gramów/ilości, użyj rozsądnych, kuchennych estymat (np. 1 łyżka ~ 15 ml, 1 ząbek czosnku ~ 3 g, 1 szklanka mąki ~ 120 g itd.).\n" +
+               "- Konwertuj jednostki i sumuj po wszystkich składnikach.\n" +
+               "- Zwracaj zawsze liczby > 0 (bez zer; jeśli brak danych – oszacuj).\n" +
+               "- Zwróć tylko czysty JSON dokładnie w schemacie:\n" +
+               "{\"Calories\": number, \"Proteins\": number, \"Carbohydrates\": number, \"Fats\": number}\n" +
+               "- Użyj kropki jako separatora dziesiętnego. Żadnego dodatkowego tekstu.\n\n" +
+               "Składniki:\n" +
+               $"```{ingredients}```";
+    }
 
-Zasady:
-- Jeśli brakuje dokładnych gramów/ilości, użyj rozsądnych, kuchennych estymat (np. 1 łyżka ~ 15 ml, 1 ząbek czosnku ~ 3 g, 1 szklanka mąki ~ 120 g itd.).
-- Konwertuj jednostki i sumuj po wszystkich składnikach.
-- Zwracaj zawsze liczby > 0 (bez zer; jeśli brak danych – oszacuj).
-- Zwróć tylko czysty JSON dokładnie w schemacie:
-{"Calories": number, "Proteins": number, "Carbohydrates": number, "Fats": number}
-- Użyj kropki jako separatora dziesiętnego. Żadnego dodatkowego tekstu.
-
-Składniki:
-```%INGREDIENTS%```
-"""
-            : """
-You are a nutritionist. Compute macros for the whole recipe from the ingredient list.
-
-Rules:
-- If exact quantities are missing, use reasonable, common-kitchen estimates (e.g., 1 tbsp ~ 15 ml, 1 garlic clove ~ 3 g, 1 cup flour ~ 120 g, etc.).
-- Convert units and sum across all ingredients.
-- Always return numbers > 0 (no zeros; estimate when uncertain).
-- Return only raw JSON in exactly this schema:
-{"Calories": number, "Proteins": number, "Carbohydrates": number, "Fats": number}
-- Use dot as decimal separator. No prose.
-
-Ingredients:
-```%INGREDIENTS%```
-""";
-
-        return prompt.Replace("%INGREDIENTS%", ingredients);
+    private static string BuildEnglishPrompt(string ingredients)
+    {
+        return "You are a nutritionist. Compute macros for the whole recipe from the ingredient list.\n\n" +
+               "Rules:\n" +
+               "- If exact quantities are missing, use reasonable, common-kitchen estimates (e.g., 1 tbsp ~ 15 ml, 1 garlic clove ~ 3 g, 1 cup flour ~ 120 g, etc.).\n" +
+               "- Convert units and sum across all ingredients.\n" +
+               "- Always return numbers > 0 (no zeros; estimate when uncertain).\n" +
+               "- Return only raw JSON in exactly this schema:\n" +
+               "{\"Calories\": number, \"Proteins\": number, \"Carbohydrates\": number, \"Fats\": number}\n" +
+               "- Use dot as decimal separator. No prose.\n\n" +
+               "Ingredients:\n" +
+               $"```{ingredients}```";
     }
 
     private static NutritionInfo DefaultNutrition() => new()

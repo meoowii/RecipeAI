@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using RecipeAI.Interfaces;
 using RecipeAI.Services;
+using RecipeAI.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +12,12 @@ builder.Services.AddSwaggerGen();
 
 // Register HttpClient factory for Ollama calls
 builder.Services.AddHttpClient();
+
+// Configure options
+builder.Services.Configure<TesseractOptions>(
+    builder.Configuration.GetSection(TesseractOptions.SectionName));
+builder.Services.Configure<OllamaOptions>(
+    builder.Configuration.GetSection(OllamaOptions.SectionName));
 
 // Register services
 builder.Services.AddScoped<IOcrService, TesseractOcrService>();
@@ -30,7 +37,6 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
 
 // API endpoints
 app.MapPost("/api/analyze-recipe", async (

@@ -1,5 +1,7 @@
+using Microsoft.Extensions.Options;
 using Tesseract;
 using RecipeAI.Interfaces;
+using RecipeAI.Options;
 
 namespace RecipeAI.Services;
 
@@ -8,10 +10,12 @@ public class TesseractOcrService : IOcrService
     private readonly ILogger<TesseractOcrService> _logger;
     private readonly string _tessdataPath;
 
-    public TesseractOcrService(ILogger<TesseractOcrService> logger, IConfiguration configuration)
+    public TesseractOcrService(
+        ILogger<TesseractOcrService> logger,
+        IOptions<TesseractOptions> options)
     {
         _logger = logger;
-        _tessdataPath = configuration["Tesseract:TessdataPath"] ?? "tessdata";
+        _tessdataPath = options.Value.BaseDataPath;
     }
 
     public async Task<string> ExtractTextFromImageAsync(byte[] imageData)
