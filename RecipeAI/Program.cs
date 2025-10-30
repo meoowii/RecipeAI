@@ -1,9 +1,17 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using RecipeAI.Extensions;
 using RecipeAI.Interfaces;
-using RecipeAI.Services;
 using RecipeAI.Options;
+using RecipeAI.Responses;
+using RecipeAI.Serilog;
+using RecipeAI.Services;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Serilog config 
+Log.Logger = SerilogHelper.CreateLogger(builder.Configuration);
+builder.Host.UseSerilog();
 
 // Add services to the container
 
@@ -24,6 +32,9 @@ builder.Services.AddScoped<IOcrService, TesseractOcrService>();
 builder.Services.AddScoped<ILanguageDetectionService, LanguageDetectionService>();
 builder.Services.AddScoped<INutritionAnalysisService, OllamaNutritionService>();
 
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<IActivityProvider, ActivityProvider>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline
@@ -35,6 +46,8 @@ if (app.Environment.IsDevelopment())
         c.SwaggerEndpoint("/swagger/v1/swagger.json", "RecipeAI v1");
     });
 }
+
+app.UseCustomExceptionHandler();
 
 app.UseHttpsRedirection();
 
@@ -65,16 +78,17 @@ app.MapPost("/api/analyze-recipe", async (
             language,
             nutrition = nutritionInfo
         });
-    }
+}
     catch (Exception ex)
     {
-        logger.LogError(ex, "Error processing recipe image");
-        return Results.StatusCode(500);
-    }
+    logger.LogError(ex, "Error processing recipe image");
+    return Results.StatusCode(500);
+}
 })
 .Accepts<IFormFile>("multipart/form-data")
 .Produces(StatusCodes.Status200OK)
 .Produces(StatusCodes.Status400BadRequest)
+.Produces<ApiErrorResponse>(StatusCodes.Status500InternalServerError)
 .DisableAntiforgery()
 .WithName("AnalyzeRecipe")
 .WithOpenApi();
